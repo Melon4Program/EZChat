@@ -30,61 +30,6 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Serve the static files from the React app
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-
-// --- Multer Configuration for File Uploads ---
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        // Create a unique filename to prevent overwrites
-        cb(null, `${Date.now()}-${file.originalname}`);
-    },
-});
-
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: MAX_FILE_SIZE },
-});
-
-
-// --- In-Memory Data Store (for demonstration purposes) ---
-// In a production environment, you would use a database (e.g., Redis, MongoDB, PostgreSQL).
-const rooms = {}; // Stores room data: { roomName: { passwordHash: '...' } }
-const users = {}; // { socketId: { username: '...', currentRoom: '...' } }
-
-// --- Helper Functions ---
-const sanitizeInput = (input) => {
-    // A basic sanitizer. For production, use a library like DOMPurify on the frontend
-    // and appropriate validation/sanitization libraries on the backend.
-    return input.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-};
-
-// --- Admin Authentication Middleware ---
-const adminAuth = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Unauthorized: No token provided.' });
-    }
-    const token = authHeader.split(' ')[1];
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET_KEY);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ message: 'Forbidden: Admin access required.' });
-        }
-        next();
-    } catch (error) {
-        return res.status(401).json({ message: 'Unauthorized: Invalid token.' });
-    }
-};
-
-
 // --- REST API Endpoints ---
 
 // Admin Login (for demonstration)
@@ -162,7 +107,15 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     res.status(200).json({ message: 'File uploaded successfully.', fileUrl });
 });
 
-// SPA Fallback - This should be after all API routes
+// --- Static File Serving ---
+
+// Serve the static files from the React app
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// SPA Fallback - This should be after all API routes and static file serving
 // It sends the main HTML file for any request that doesn't match the above routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
