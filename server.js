@@ -61,6 +61,21 @@ const adminAuth = (req, res, next) => {
     }
 };
 
+// --- Multer Configuration for File Uploads ---
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        // Create a unique filename to prevent overwrites
+        cb(null, `${Date.now()}-${file.originalname}`);
+    },
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: MAX_FILE_SIZE },
+});
 
 // --- REST API Endpoints ---
 
