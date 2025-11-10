@@ -60,7 +60,7 @@ app.post('/api/rooms', adminAuth, async (req, res) => {
     try {
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
-        rooms[sanitizedRoomName] = { passwordHash };
+        rooms[sanitizedRoomName] = { passwordHash, messages: [] };
         console.log(`Room created: ${sanitizedRoomName}`);
         res.status(201).json({ message: `Room '${sanitizedRoomName}' created successfully.` });
     } catch (error) {
@@ -91,6 +91,11 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
         isUpload: true, // Flag to identify this as a file upload message
         timestamp: new Date().toISOString(),
     };
+
+    if (rooms[roomName]) {
+        rooms[roomName].messages.push(messageData);
+    }
+
     io.to(roomName).emit('newMessage', messageData);
 
     // Set a timer to delete the file after 2 hours
@@ -105,6 +110,23 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     }, FILE_EXPIRATION_TIME);
 
     res.status(200).json({ message: 'File uploaded successfully.', fileUrl });
+});
+
+// Admin: Get all rooms, members, and chat history
+app.get('/api/admin/rooms', adminAuth, (req, res) => {
+    const roomDetails = Object.keys(rooms).map(roomName => {
+        const members = Object.values(users)
+            .filter(user => user.currentRoom === roomName)
+            .map(user => user.username);
+        
+        return {
+            roomName,
+            members,
+            messageCount: rooms[roomName].messages.length,
+            messages: rooms[roomName].messages, // Include full history for admin
+        };
+    });
+    res.json(roomDetails);
 });
 
 // --- Static File Serving ---
@@ -146,8 +168,11 @@ io.on('connection', (socket) => {
 
             console.log(`${sanitizedUsername} (${socket.id}) joined room: ${sanitizedRoomName}`);
 
-            // Notify user they have joined
-            socket.emit('joinedRoom', { roomName: sanitizedRoomName });
+            // Notify user they have joined and send chat history
+            socket.emit('joinedRoom', { 
+                roomName: sanitizedRoomName,
+                history: rooms[sanitizedRoomName].messages 
+            });
 
             // Broadcast to others in the room that a new user has joined
             socket.to(sanitizedRoomName).emit('userJoined', {
@@ -167,11 +192,31 @@ io.on('connection', (socket) => {
             const { username, currentRoom } = user;
             const sanitizedMessage = sanitizeInput(message);
             
-            io.to(currentRoom).emit('newMessage', {
+            const messageData = {
                 username,
                 message: sanitizedMessage,
                 timestamp: new Date().toISOString(),
+            };
+
+            if (rooms[currentRoom]) {
+                rooms[currentRoom].messages.push(messageData);
+            }
+            
+            io.to(currentRoom).emit('newMessage', messageData);
+        }
+    });
+
+    socket.on('leaveRoom', () => {
+        const user = users[socket.id];
+        if (user) {
+            const { username, currentRoom } = user;
+            delete users[socket.id];
+            socket.leave(currentRoom);
+            io.to(currentRoom).emit('userLeft', {
+                username,
+                message: `${username} has left the chat.`,
             });
+            console.log(`${username} (${socket.id}) left room: ${currentRoom}`);
         }
     });
 
