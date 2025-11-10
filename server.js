@@ -30,6 +30,38 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// --- In-Memory Data Store (for demonstration purposes) ---
+// In a production environment, you would use a database (e.g., Redis, MongoDB, PostgreSQL).
+const rooms = {}; // Stores room data: { roomName: { passwordHash: '...', messages: [] } }
+const users = {}; // { socketId: { username: '...', currentRoom: '...' } }
+const bannedUsers = new Set(); // Stores banned usernames
+
+// --- Helper Functions ---
+const sanitizeInput = (input) => {
+    // A basic sanitizer. For production, use a library like DOMPurify on the frontend
+    // and appropriate validation/sanitization libraries on the backend.
+    return input.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+};
+
+// --- Admin Authentication Middleware ---
+const adminAuth = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Unauthorized: No token provided.' });
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET_KEY);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ message: 'Forbidden: Admin access required.' });
+        }
+        next();
+    } catch (error) {
+        return res.status(401).json({ message: 'Unauthorized: Invalid token.' });
+    }
+};
+
+
 // --- REST API Endpoints ---
 
 // Admin Login (for demonstration)
@@ -112,6 +144,17 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     res.status(200).json({ message: 'File uploaded successfully.', fileUrl });
 });
 
+// Admin: Ban a user
+app.post('/api/admin/ban', adminAuth, (req, res) => {
+    const { username } = req.body;
+    if (!username) {
+        return res.status(400).json({ message: 'Username is required.' });
+    }
+    bannedUsers.add(username);
+    console.log(`Admin banned user: ${username}`);
+    res.status(200).json({ message: `User '${username}' has been banned.` });
+});
+
 // Admin: Get all rooms, members, and chat history
 app.get('/api/admin/rooms', adminAuth, (req, res) => {
     const roomDetails = Object.keys(rooms).map(roomName => {
@@ -151,6 +194,10 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', async ({ roomName, password, username }) => {
         const sanitizedRoomName = sanitizeInput(roomName);
         const sanitizedUsername = sanitizeInput(username);
+
+        if (bannedUsers.has(sanitizedUsername)) {
+            return socket.emit('error', { message: 'You have been banned from the chat.' });
+        }
 
         const room = rooms[sanitizedRoomName];
         if (!room) {
