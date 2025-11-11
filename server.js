@@ -166,6 +166,18 @@ app.post('/api/admin/ban', adminAuth, (req, res) => {
         return res.status(400).json({ message: 'Username is required.' });
     }
     bannedUsers.add(username);
+
+    // Find the user's socket and disconnect them if they are online
+    const userSocketId = Object.keys(users).find(socketId => users[socketId].username === username);
+    if (userSocketId) {
+        const userSocket = io.sockets.sockets.get(userSocketId);
+        if (userSocket) {
+            // Notify the user they have been banned and then disconnect
+            userSocket.emit('banned', { message: 'You have been banned by an administrator.' });
+            userSocket.disconnect(true); // true ensures the socket is forcefully closed
+        }
+    }
+
     console.log(`Admin banned user: ${username}`);
     res.status(200).json({ message: `User '${username}' has been banned.` });
 });
@@ -185,6 +197,32 @@ app.get('/api/admin/rooms', adminAuth, (req, res) => {
         };
     });
     res.json(roomDetails);
+});
+
+// Admin: Remove a room
+app.delete('/api/admin/rooms/:roomName', adminAuth, (req, res) => {
+    const { roomName } = req.params;
+    if (rooms[roomName]) {
+        // Notify users in the room before closing it
+        io.to(roomName).emit('roomClosed', { message: `The room '${roomName}' has been closed by an administrator.` });
+        
+        // Disconnect all sockets from the room
+        const socketsInRoom = io.sockets.adapter.rooms.get(roomName);
+        if (socketsInRoom) {
+            socketsInRoom.forEach(socketId => {
+                const socket = io.sockets.sockets.get(socketId);
+                if (socket) {
+                    socket.leave(roomName);
+                }
+            });
+        }
+
+        delete rooms[roomName];
+        console.log(`Admin removed room: ${roomName}`);
+        res.status(200).json({ message: `Room '${roomName}' has been removed.` });
+    } else {
+        res.status(404).json({ message: 'Room not found.' });
+    }
 });
 
 // --- Static File Serving ---
