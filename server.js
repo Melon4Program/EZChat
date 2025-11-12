@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'https://ezchat-zonq.onrender.com', // Restrict to the frontend's domain
+    origin: '*', // In production, restrict this to your frontend's domain
     methods: ['GET', 'POST'],
   },
 });
@@ -341,10 +341,6 @@ io.on('connection', (socket) => {
 
 
 // --- Server Initialization ---
-if (require.main === module) {
-  server.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-  });
-}
-
-module.exports = server;
+});

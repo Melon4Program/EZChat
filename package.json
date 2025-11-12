@@ -2,13 +2,10 @@
   "name": "chat-backend",
   "version": "1.0.0",
   "description": "Backend for the private group chat application.",
-  "main": "electron.js",
-  "homepage": "./",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "electron:start": "electron .",
-    "electron:build": "electron-builder"
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
@@ -23,35 +20,6 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "electron": "^39.1.2",
-    "electron-builder": "^26.0.12",
     "nodemon": "^3.1.0"
-  },
-  "build": {
-    "appId": "com.chatapp.desktop",
-    "productName": "Chat App",
-    "directories": {
-      "output": "../exe"
-    },
-    "files": [
-      "**/*",
-      "!node_modules/.bin",
-      "!node_modules/electron",
-      "!node_modules/electron-builder"
-    ],
-    "extraResources": [
-      {
-        "from": "public",
-        "to": "public"
-      },
-      {
-        "from": "uploads",
-        "to": "uploads"
-      }
-    ],
-    "win": {
-      "verifyUpdateCodeSignature": false,
-      "publisherName": ""
-    }
   }
 }
