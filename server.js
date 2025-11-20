@@ -32,9 +32,37 @@ app.use(express.json());
 
 // --- In-Memory Data Store (for demonstration purposes) ---
 // In a production environment, you would use a database (e.g., Redis, MongoDB, PostgreSQL).
-const rooms = {}; // Stores room data: { roomName: { passwordHash: '...', messages: [] } }
+let rooms = {}; // Stores room data: { roomName: { passwordHash: '...', messages: [] } }
 const users = {}; // { socketId: { username: '...', currentRoom: '...' } }
 const bannedUsers = new Set(); // Stores banned usernames
+
+const CHAT_HISTORY_FILE = path.join(__dirname, 'chat_history.json');
+
+// --- Data Persistence Functions ---
+const saveData = async () => {
+    try {
+        await fs.promises.writeFile(CHAT_HISTORY_FILE, JSON.stringify(rooms, null, 2));
+    } catch (error) {
+        console.error('Error saving chat history:', error);
+    }
+};
+
+const loadData = async () => {
+    try {
+        if (fs.existsSync(CHAT_HISTORY_FILE)) {
+            const data = await fs.promises.readFile(CHAT_HISTORY_FILE, 'utf-8');
+            rooms = JSON.parse(data);
+            console.log('Chat history loaded successfully.');
+        } else {
+            // If the file doesn't exist, create it with an empty object
+            await fs.promises.writeFile(CHAT_HISTORY_FILE, JSON.stringify({}, null, 2));
+            console.log('Created new chat history file.');
+        }
+    } catch (error) {
+        console.error('Error loading chat history:', error);
+    }
+};
+
 
 // --- Helper Functions ---
 const sanitizeInput = (input) => {
@@ -141,6 +169,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 
     if (rooms[roomName]) {
         rooms[roomName].messages.push(messageData);
+        saveData(); // Save data after adding message
     }
 
     io.to(roomName).emit('newMessage', messageData);
@@ -300,6 +329,7 @@ io.on('connection', (socket) => {
 
             if (rooms[currentRoom]) {
                 rooms[currentRoom].messages.push(messageData);
+                saveData(); // Save data after adding message
             }
             
             io.to(currentRoom).emit('newMessage', messageData);
@@ -341,6 +371,7 @@ io.on('connection', (socket) => {
 
 
 // --- Server Initialization ---
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+    await loadData(); // Load data on server start
     console.log(`Server running on port ${PORT}`);
 });
